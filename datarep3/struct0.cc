@@ -9,7 +9,7 @@ struct example {
 };
 
 int main() {
-    example e;
+    example e; //note that the same as the arrays
 
     e.x = 61;
     e.y = 62;
