@@ -60,8 +60,9 @@ $(ASMPROGRAMS): %: %.o hexdump.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(O) -o $@ $^
 
 
-allfc.txt: $(wildcard f*.cc src/f*.cc) always
-	for i in f*.cc src/f*.cc; do echo $$i; echo ========; cat $$i; echo; echo; done > allfc.txt
+allfc.txt: always
+	for i in $(foreach x,$(patsubst %.s,%.cc,$(BUILDABLEASM)),$(wildcard $(x) src/$(x))); do \
+	    echo $$i; echo ========; cat $$i; echo; echo; done > allfc.txt
 
 allfs.txt: $(ALLASM) always
 	for i in $(ALLASM); do \
