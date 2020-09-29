@@ -5,15 +5,15 @@
 _Z3funPKc:
 .LFB27:
 	endbr64
-	xorl	%eax, %eax
-	cmpb	$0, (%rdi)
+	xorl	%eax, %eax //this holds the value 0
+	cmpb	$0, (%rdi) //if input is 0 return
 	je	.L4
 .L3:
-	leal	1(%rax), %edx
+	leal	1(%rax), %edx //load effective address doesn't dereference, assigns edx register value of %rax + 1
 	cmpb	$0, (%rdi,%rdx)
-	movq	%rdx, %rax
+	movq	%rdx, %rax //moving rdx into rax 
 	jne	.L3
-	andl	$3, %eax
+	andl	$3, %eax 
 	ret
 .L4:
 	ret

@@ -5,17 +5,17 @@
 _Z3funPKc:
 .LFB0:
 	endbr64
-	movzbl	(%rdi), %edx
-	testb	%dl, %dl
-	je	.L5
-	movsbl	1(%rdi), %eax
-	cmpb	%al, %dl
+	movzbl	(%rdi), %edx //moves the input into 3rd function argument
+	testb	%dl, %dl //3rd function argument cannot be 0? 
+	je	.L5 //this is not likely to be the else failed case is here
+	movsbl	1(%rdi), %eax  //move the s[1] into the eax register
+	cmpb	%al, %dl //compares the first and thirds function arguments but the third function argument has to be bigger than the first?
 	jne	.L1
-.L3:
-	addq	$1, %rdi
-	movl	%eax, %edx
-	movsbl	1(%rdi), %eax
-	cmpb	%dl, %al
+.L3: //this looks to be a while or some sort of recursive loop
+	addq	$1, %rdi //moves 1 into the input register
+	movl	%eax, %edx //moves return value 1 into the 3rd function argument
+	movsbl	1(%rdi), %eax //moves s[1] into return
+	cmpb	%dl, %al //only if dl > al does this return
 	je	.L3
 	ret
 .L5:
