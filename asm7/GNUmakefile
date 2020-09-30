@@ -5,7 +5,7 @@ ASMOBJECTS := $(patsubst %.s,%.o,$(ALLASM))
 ASMPROGRAMS := $(sort $(patsubst %.s,%,$(patsubst %.cc,%,$(patsubst src/%,%,$(shell grep -l main $(wildcard f*.s f*.cc src/f*.cc /dev/null))))))
 DEFAULT_ASM_CXXFLAGS = $(O)
 DEFAULT_ASM_CXXFLAGS_DEBUG = -g $(DEFAULT_ASM_CXXFLAGS)
-PROGRAMS = $(ASMPROGRAMS)
+PROGRAMS = stringrep vectorrep $(ASMPROGRAMS)
 
 all: $(BUILDABLEASM) $(PROGRAMS)
 
@@ -56,7 +56,7 @@ UNSAFEFLAGS := -U_FORTIFY_SOURCE -fno-stack-protector $(if $(ISLINUX),-no-pie,)
 $(ASMOBJECTS): %.o: %.s $(BUILDSTAMP)
 	$(call run,$(CXX) -o $@ -c,ASSEMBLE,$<)
 
-$(ASMPROGRAMS): %: %.o hexdump.o
+$(PROGRAMS): %: %.o hexdump.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(O) -o $@ $^
 	@if grep -l '^//@disassemble' src/$@.cc >/dev/null 2>&1; then objdump --disassemble=`grep '^//@disassemble' src/$@.cc | cut -d ' ' -f 2` $@ > $@.s; fi
 
