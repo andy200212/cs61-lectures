@@ -1,0 +1,21 @@
+	.text
+	.file	"f28.cc"
+	.globl	_Z1fj                   # -- Begin function _Z1fj
+	.type	_Z1fj,@function
+_Z1fj:                                  # @_Z1fj
+# %bb.0:
+	movl	%edi, %eax
+	movl	%edi, %ecx
+	leal	-1(%rax), %edx
+	imulq	%rcx, %rdx
+	shrq	%rdx
+	imull	%eax, %eax
+	subl	%edx, %eax
+	retq
+.Lfunc_end0:
+	.size	_Z1fj, .Lfunc_end0-_Z1fj
+                                        # -- End function
+	.ident	"Ubuntu clang version 10.0.1-1"
+	.section	".note.GNU-stack","",@progbits
+	.addrsig
+q

@@ -12,5 +12,5 @@ _Z1f2s1iS_:
 	ret
 .LFE0:
 	.size	_Z1f2s1iS_, .-_Z1f2s1iS_
-	.ident	"GCC: (Ubuntu 9.3.0-10ubuntu2) 9.3.0"
+	.ident	"GCC: (Ubuntu 10.2.0-5ubuntu2) 10.2.0"
 	.section	.note.GNU-stack,"",@progbits
