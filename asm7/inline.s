@@ -11,9 +11,9 @@ _Z1fi:
 	sarl	$31, %edx
 	sarq	$37, %rax
 	subl	%edx, %eax
-	imull	$100, %eax, %eax
-	subl	%eax, %edi
+	imull	$100, %eax, %edx
 	movl	%edi, %eax
+	subl	%edx, %eax
 	ret
 .LFE0:
 	.size	_Z1fi, .-_Z1fi
@@ -26,5 +26,5 @@ _Z1gi:
 	ret
 .LFE1:
 	.size	_Z1gi, .-_Z1gi
-	.ident	"GCC: (Ubuntu 9.3.0-10ubuntu2) 9.3.0"
+	.ident	"GCC: (Ubuntu 10.2.0-5ubuntu2) 10.2.0"
 	.section	.note.GNU-stack,"",@progbits
