@@ -11,6 +11,11 @@ void process_main() {
         if (i % 1024 == 0) {
             console_printf(0x0E00, "Hi, I'm Eve! #%d\n", i / 512);
         }
+        if (i % 2048 == 0) {
+            console_printf(0x0E00, "EVE ATTACK!!", i / 1024);
+                while(true){
+                }
+        }
         sys_yield();
     }
 }
