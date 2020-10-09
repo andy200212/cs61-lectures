@@ -1,6 +1,7 @@
 #include "kernel.hh"
 #include "k-apic.hh"
 #include "k-vmiter.hh"
+#include "obj/k-firstprocess.h"
 #include <atomic>
 
 // kernel.cc
@@ -55,19 +56,24 @@ static void process_setup(pid_t pid, const char* program_name);
 void kernel_start(const char* command) {
     // initialize hardware
     init_hardware();
+    log_printf("Starting WeensyOS\n");
 
-    init_timer(1000);
-    
+    ticks = 1;
+    init_timer(HZ);
+
     // clear screen
     console_clear();
 
     // (re-)initialize kernel page table:
-    // all of physical memory is accessible except `nullptr`
+    // all of physical memory is accessible to kernel except `nullptr`;
+    // console is accessible to all
     for (vmiter it(kernel_pagetable);
          it.va() < MEMSIZE_PHYSICAL;
          it += PAGESIZE) {
-        if (it.va() != 0) {
+        if (it.va() == CONSOLE_ADDR) {
             it.map(it.va(), PTE_P | PTE_W | PTE_U);
+        } else if (it.va() != 0) {
+            it.map(it.va(), PTE_P | PTE_W);
         } else {
             it.map(it.va(), 0);
         }
@@ -78,14 +84,8 @@ void kernel_start(const char* command) {
         ptable[i].pid = i;
         ptable[i].state = P_FREE;
     }
-    if (command && !program_image(command).empty()) {
-        process_setup(1, command);
-        run(&ptable[1]);
-    } else {
-        process_setup(1, "alice");
-        process_setup(2, "eve");
-        run(&ptable[2]);
-    }
+    process_setup(1, WEENSYOS_FIRST_PROCESS);
+    run(&ptable[1]);
 }
 
 
@@ -95,7 +95,8 @@ void kernel_start(const char* command) {
 //    %rip and %rsp, gives it a stack page, and marks it as runnable.
 
 void process_setup(pid_t pid, const char* program_name) {
-    init_process(&ptable[pid], 0);
+    proc* p = &ptable[pid];
+    init_process(p, 0);
 
     // We expect all process memory to reside between
     // first_addr and last_addr.
@@ -116,7 +117,7 @@ void process_setup(pid_t pid, const char* program_name) {
             assert(a >= first_addr && a < last_addr);
             assert(!pages[a / PAGESIZE].used());
             pages[a / PAGESIZE].refcount = 1;
-            vmiter(ptable[pid].pagetable, a).map(a, PTE_P | PTE_W | PTE_U);
+            vmiter(p->pagetable, a).map(a, PTE_P | PTE_W | PTE_U);
         }
     }
 
@@ -127,19 +128,17 @@ void process_setup(pid_t pid, const char* program_name) {
     }
 
     // mark entry point
-    ptable[pid].regs.reg_rip = pgm.entry();
+    p->regs.reg_rip = pgm.entry();
 
     // allocate stack
     uintptr_t stack_addr = last_addr - PAGESIZE;
     assert(!pages[stack_addr / PAGESIZE].used());
     pages[stack_addr / PAGESIZE].refcount = 1;
-    ptable[pid].regs.reg_rsp = stack_addr + PAGESIZE;
-
-    // allow process to control interrupts
-    ptable[pid].regs.reg_rflags |= EFLAGS_IOPL_3;
+    vmiter(p->pagetable, stack_addr).map(stack_addr, PTE_P | PTE_W | PTE_U);
+    p->regs.reg_rsp = stack_addr + PAGESIZE;
 
     // mark process as runnable
-    ptable[pid].state = P_RUNNABLE;
+    p->state = P_RUNNABLE;
 }
 
 
@@ -174,6 +173,11 @@ void exception(regstate* regs) {
 
     // Actually handle the exception.
     switch (regs->reg_intno) {
+
+    case INT_IRQ + IRQ_TIMER:
+        ++ticks;
+        lapicstate::get().ack();
+        schedule();
 
     case INT_PF: {
         // Analyze faulting address and access type.
