@@ -28,7 +28,6 @@ proc ptable[NPROC];             // array of process descriptors
                                 // Note that `ptable[0]` is never used.
 proc* current;                  // pointer to currently executing proc
 
-#define HZ 100                  // timer interrupt frequency (interrupts/sec)
 std::atomic<unsigned long> ticks; // # timer interrupts so far
 
 
@@ -45,6 +44,8 @@ pageinfo pages[NPAGES];
 [[noreturn]] void run(proc* p);
 void exception(regstate* regs);
 uintptr_t syscall(regstate* regs);
+ssize_t syscall_pipewrite(proc* p);
+ssize_t syscall_piperead(proc* p);
 
 
 // kernel_start(command)
@@ -84,10 +85,36 @@ void kernel_start(const char* command) {
         ptable[i].pid = i;
         ptable[i].state = P_FREE;
     }
-    process_setup(1, WEENSYOS_FIRST_PROCESS);
-    process_setup(2, "yielder");
+    if (!command) {
+        command = WEENSYOS_FIRST_PROCESS;
+    }
+    if (command && !program_image(command).empty()) {
+        process_setup(1, command);
+    } else {
+        process_setup(1, "pipewriter");
+        process_setup(2, "pipereader");
+    }
     run(&ptable[1]);
 }
+
+
+
+// kalloc_user_pagetable()
+//    Return a newly allocated page table with the minimal set of
+//    mappings required for user processes.
+
+x86_64_pagetable* kalloc_user_pagetable() {
+    x86_64_pagetable* pt = kalloc_pagetable();
+    if (pt) {
+        for (vmiter it(pt), kit(kernel_pagetable);
+             it.va() < PROC_START_ADDR;
+             it += PAGESIZE, kit += PAGESIZE) {
+            it.map(kit.pa(), kit.perm());
+        }
+    }
+    return pt;
+}
+
 
 
 // process_setup(pid, program_name)
@@ -105,24 +132,26 @@ void process_setup(pid_t pid, const char* program_name) {
     uintptr_t last_addr = PROC_START_ADDR + pid * PROC_SIZE;
 
     // initialize process page table
-    ptable[pid].pagetable = kernel_pagetable;
+    ptable[pid].pagetable = kalloc_user_pagetable();
 
     // obtain reference to the program image
     program_image pgm(program_name);
 
     // allocate and map all memory
     for (auto seg = pgm.begin(); seg != pgm.end(); ++seg) {
-        for (uintptr_t a = round_down(seg.va(), PAGESIZE);
-             a < seg.va() + seg.size();
-             a += PAGESIZE) {
-            assert(a >= first_addr && a < last_addr);
-            assert(!pages[a / PAGESIZE].used());
-            ++pages[a / PAGESIZE].refcount;
-            vmiter(p->pagetable, a).map(a, PTE_P | PTE_W | PTE_U);
+        for (uintptr_t va = round_down(seg.va(), PAGESIZE);
+             va < seg.va() + seg.size();
+             va += PAGESIZE) {
+            assert(va >= first_addr && va < last_addr);
+            assert(!pages[va / PAGESIZE].used());
+            ++pages[va / PAGESIZE].refcount;
+            void* pg = (void*) va;
+            vmiter(p->pagetable, va).map(pg, PTE_P | PTE_W | PTE_U);
         }
     }
 
     // copy instructions and data into place
+    // XXX This only works because the initial process is identity-mapped!
     for (auto seg = pgm.begin(); seg != pgm.end(); ++seg) {
         memset((void*) seg.va(), 0, seg.size());
         memcpy((void*) seg.va(), seg.data(), seg.data_size());
@@ -145,11 +174,27 @@ void process_setup(pid_t pid, const char* program_name) {
 
 
 // kalloc(sz)
-//    The kernel allocator is disabled for this version of WeensyOS.
+//    Kernel memory allocator. Allocates `sz` contiguous bytes and
+//    returns a pointer to the allocated memory, or `nullptr` on failure.
+//
+//    The returned memory is initialized to 0xCC, which corresponds to
+//    the x86 instruction `int3` (this may help you debug). You'll
+//    probably want to reset it to something more useful.
 
 void* kalloc(size_t sz) {
-    assert(false, "kalloc not implemented");
+    if (sz <= PAGESIZE) {
+        for (uintptr_t pa = 0; pa != MEMSIZE_PHYSICAL; pa += PAGESIZE) {
+            if (allocatable_physical_address(pa)
+                && !pages[pa / PAGESIZE].used()) {
+                ++pages[pa / PAGESIZE].refcount;
+                memset((void*) pa, 0xCC, PAGESIZE);
+                return (void*) pa;
+            }
+        }
+    }
+    return nullptr;
 }
+
 
 
 // exception(regs)
@@ -183,11 +228,6 @@ void exception(regstate* regs) {
     // Actually handle the exception.
     switch (regs->reg_intno) {
 
-    case 0:
-        current->regs.reg_rax = 6161;
-        current->regs.reg_rip += 2;
-        run(current);
-        
     case INT_IRQ + IRQ_TIMER:
         ++ticks;
         lapicstate::get().ack();
@@ -218,7 +258,14 @@ void exception(regstate* regs) {
 
     default:
     unhandled:
-        panic("Unexpected exception %d!\n", regs->reg_intno);
+        if ((regs->reg_cs & 3) != 0) {
+            error_printf("Process %d unexpected exception %d (rip=%p)!\n",
+                         current->pid, regs->reg_intno, regs->reg_rip);
+            current->state = P_BROKEN;
+            break;
+        } else {
+            panic("Unexpected exception %d!\n", regs->reg_intno);
+        }
 
     }
 
@@ -264,8 +311,10 @@ uintptr_t syscall(regstate* regs) {
         panic(nullptr);         // does not return
 
     case SYSCALL_GETPID:
-        current->regs.reg_rax = current->pid; //sets the rax register value to the current process id
-        run(current);
+        return current->pid;
+
+    case SYSCALL_GETTICKS:
+        return ticks;
 
     case SYSCALL_YIELD:
         current->regs.reg_rax = 0;
@@ -280,8 +329,11 @@ uintptr_t syscall(regstate* regs) {
         return oslen;
     }
 
-    case SYSCALL_CHANGEREG:
-        panic("sys_changereg not implemented yet!\n");
+    case SYSCALL_PIPEWRITE:
+        return syscall_pipewrite(current);
+
+    case SYSCALL_PIPEREAD:
+        return syscall_piperead(current);
 
     default:
         panic("Unexpected system call %ld!\n", regs->reg_rax);
@@ -289,6 +341,56 @@ uintptr_t syscall(regstate* regs) {
     }
 
     panic("Should not get here!\n");
+}
+
+
+// pipe buffer
+
+char pipebuf[1];
+size_t pipebuf_len = 0;
+
+// syscall_pipewrite([buf, sz])
+//    Handles the SYSCALL_PIPEWRITE system call; see `sys_pipewrite`
+//    in `u-lib.hh`.
+
+ssize_t syscall_pipewrite(proc* p) {
+    const char* buf = (const char*) p->regs.reg_rdi;
+    size_t sz = p->regs.reg_rsi;
+
+    if (sz == 0) {
+        // nothing to write
+        return 0;
+    } else if (pipebuf_len == 1) {
+        // kernel buffer full, try again
+        return -1;
+    } else {
+        // write one character
+        pipebuf[0] = buf[0];
+        pipebuf_len = 1;
+        return 1;
+    }
+}
+
+// syscall_piperead([buf, sz])
+//    Handles the SYSCALL_PIPEREAD system call; see `sys_piperead`
+//    in `u-lib.hh`.
+
+ssize_t syscall_piperead(proc* p) {
+    char* buf = (char*) p->regs.reg_rdi;
+    size_t sz = p->regs.reg_rsi;
+
+    if (sz == 0) {
+        // no room to read
+        return 0;
+    } else if (pipebuf_len == 0) {
+        // kernel buffer empty, try again
+        return -1;
+    } else {
+        // read one character
+        buf[0] = pipebuf[0];
+        pipebuf_len = 0;
+        return 1;
+    }
 }
 
 

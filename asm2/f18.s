@@ -9,5 +9,5 @@ _Z9ptr_arithml:
 	ret
 .LFE0:
 	.size	_Z9ptr_arithml, .-_Z9ptr_arithml
-	.ident	"GCC: (Ubuntu 9.3.0-10ubuntu2) 9.3.0"
+	.ident	"GCC: (Ubuntu 10.2.0-5ubuntu2) 10.2.0"
 	.section	.note.GNU-stack,"",@progbits

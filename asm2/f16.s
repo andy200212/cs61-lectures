@@ -9,5 +9,5 @@ _Z12array_accessP2prl:
 	ret
 .LFE0:
 	.size	_Z12array_accessP2prl, .-_Z12array_accessP2prl
-	.ident	"GCC: (Ubuntu 9.3.0-10ubuntu2) 9.3.0"
+	.ident	"GCC: (Ubuntu 10.2.0-5ubuntu2) 10.2.0"
 	.section	.note.GNU-stack,"",@progbits

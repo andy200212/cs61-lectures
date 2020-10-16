@@ -1,7 +1,7 @@
 #include "u-lib.hh"
 
 void process_main() {
-    console_printf(0x0F00, "Hello!\n");
+    console_printf(0x0F00, "Hello! 1/0 returns %d\n", 1/0);
     for (int i = 1; i <= 3; ++i) {
         int r = sys_getpid();
         console_printf(0x0F00, "hello: getpid #%d returns %d\n", i, r);
