@@ -294,8 +294,8 @@ uintptr_t syscall(regstate* regs) {
 
     // It can be useful to log events using `log_printf`.
     // Events logged this way are stored in the host's `log.txt` file.
-    /* log_printf("proc %d: syscall %d at rip %p\n",
-                  current->pid, regs->reg_rax, regs->reg_rip); */
+    log_printf("proc %d: syscall %d at rip %p\n",
+                  current->pid, regs->reg_rax, regs->reg_rip);
 
     // Show the current cursor location.
     console_show_cursor(cursorpos);
@@ -346,8 +346,9 @@ uintptr_t syscall(regstate* regs) {
 
 // pipe buffer
 
-char pipebuf[1];
+char pipebuf[100];
 size_t pipebuf_len = 0;
+proc* blocked_reader = nullptr;
 
 // syscall_pipewrite([buf, sz])
 //    Handles the SYSCALL_PIPEWRITE system call; see `sys_pipewrite`
@@ -360,14 +361,22 @@ ssize_t syscall_pipewrite(proc* p) {
     if (sz == 0) {
         // nothing to write
         return 0;
-    } else if (pipebuf_len == 1) {
+    } else if (pipebuf_len == sizeof(pipebuf)) {
         // kernel buffer full, try again
         return -1;
     } else {
-        // write one character
-        pipebuf[0] = buf[0];
-        pipebuf_len = 1;
-        return 1;
+        // write some characters
+        size_t ncopy = min(sz, sizeof(pipebuf) - pipebuf_len);
+        memcpy(pipebuf + pipebuf_len, buf, ncopy);
+        pipebuf_len += ncopy;
+        p->regs.reg_rax = ncopy;
+        if(blocked_reader){
+            proc* p2 = blocked_reader;
+            blocked_reader = nullptr;
+            p2->state = P_RUNNABLE;
+            syscall_piperead(p2);
+        }
+        schedule();
     }
 }
 
@@ -384,12 +393,19 @@ ssize_t syscall_piperead(proc* p) {
         return 0;
     } else if (pipebuf_len == 0) {
         // kernel buffer empty, try again
-        return -1;
+        assert(!blocked_reader);
+        blocked_reader = p;
+        p->regs.reg_rax = -1;
+        p->state = P_BLOCKED;
+        schedule();
     } else {
-        // read one character
-        buf[0] = pipebuf[0];
-        pipebuf_len = 0;
-        return 1;
+        // read some characters
+        size_t ncopy = min(sz, pipebuf_len);
+        memcpy(buf, pipebuf, ncopy);
+        memmove(pipebuf, pipebuf + ncopy, pipebuf_len - ncopy);
+        pipebuf_len -= ncopy;
+        p->regs.reg_rax = ncopy;
+        schedule();
     }
 }
 
