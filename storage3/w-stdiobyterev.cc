@@ -13,16 +13,23 @@ int main(int argc, char* argv[]) {
     }
 
     size_t size = 51200000;
-    parse_arguments(argc, argv, &size, nullptr);
+    size_t nwrite = size;
+    parse_arguments(argc, argv, &nwrite, nullptr);
 
     const char* buf = "6";
     start_tstamp = tstamp();
 
+    size_t pos = size;
     size_t n = 0;
-    while (n < size) {
+    while (n < nwrite) {
+        pos -= 1;
+        if (fseek(f, pos, SEEK_SET) == -1) {
+            perror("fseek");
+            exit(1);
+        }
         size_t r = fwrite(buf, 1, 1, f);
         if (r != 1) {
-            perror("write");
+            perror("fwrite");
             exit(1);
         }
         n += r;

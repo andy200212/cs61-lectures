@@ -1,37 +1,37 @@
-#define PRINT_FREQUENCY 128
 #include "iobench.hh"
 bool quiet = false;
 double start_tstamp;
 
 int main(int argc, char* argv[]) {
-    int fd = STDOUT_FILENO;
-    if (isatty(fd)) {
-        fd = open(DATAFILE, O_WRONLY | O_CREAT | O_TRUNC | O_SYNC, 0666);
+    FILE* f = stdin;
+    if (isatty(fileno(f))) {
+        f = fopen(DATAFILE, "r");
     }
-    if (fd < 0) {
-        perror("open");
+    if (!f) {
+        perror("fopen");
         exit(1);
     }
 
-    size_t size = 5120000;
+    size_t size = filesize(fileno(f));
     parse_arguments(argc, argv, &size, nullptr);
 
-    const char* buf = "6";
     start_tstamp = tstamp();
 
     size_t n = 0;
     while (n < size) {
-        ssize_t r = write(fd, buf, 1);
-        if (r != 1) {
-            perror("write");
+        int ch = fgetc(f);
+        if (ch == EOF && ferror(f)) {
+            perror("fgetc");
             exit(1);
+        } else if (ch == EOF) {
+            break;
         }
-        n += r;
+        n += 1;
         if (n % PRINT_FREQUENCY == 0) {
             report(n);
         }
     }
 
-    close(fd);
+    fclose(f);
     report(n, true);
 }
