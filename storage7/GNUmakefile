@@ -1,4 +1,4 @@
-BASEPROGRAMS = consistency $(sort $(patsubst %.cc,%,$(wildcard [rw]-*.cc)))
+BASEPROGRAMS = $(sort $(patsubst %.cc,%,$(wildcard [rw]-*.cc))) forkmix
 PROGRAMS = $(BASEPROGRAMS)
 all: $(PROGRAMS) $(DATAFILE)
 
