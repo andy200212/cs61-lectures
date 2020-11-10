@@ -1,4 +1,5 @@
-BASEPROGRAMS = fork1 fork2 fork3 forkmix
+BASEPROGRAMS = timedwait-poll timedwait-block timedwait-blockvar \
+	timedwait-alarm timedwait-selfpipe
 PROGRAMS = $(BASEPROGRAMS)
 all: $(PROGRAMS) $(DATAFILE)
 

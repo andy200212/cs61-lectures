@@ -1,4 +1,4 @@
-BASEPROGRAMS = fork1 fork2 fork3 forkmix
+BASEPROGRAMS = pipesizer
 PROGRAMS = $(BASEPROGRAMS)
 all: $(PROGRAMS) $(DATAFILE)
 
