@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
         exit(0);
     }
 
-    // Wait for the child and print its status
+    // Wait for the child and print its status --> this loop is using pollling
     int status;
     pid_t exited_pid = 0;
     while (tstamp() - start_time < timeout && exited_pid == 0) {
@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
         assert(exited_pid == 0 || exited_pid == p1);
     }
 
+    // Print results
     if (exited_pid == 0) {
         fprintf(stderr, "%s child timed out\n", argv[0]);
     } else if (WIFEXITED(status)) {

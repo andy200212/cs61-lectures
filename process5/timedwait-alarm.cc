@@ -16,10 +16,7 @@ int main(int argc, char** argv) {
     // Set the timer
     struct itimerval itimer;
     timerclear(&itimer.it_interval);
-    double timeout_intpart;
-    double timeout_fracpart = modf(timeout, &timeout_intpart);
-    itimer.it_value.tv_sec = (unsigned) timeout_intpart;
-    itimer.it_value.tv_usec = (unsigned) (timeout_fracpart * 1000000);
+    itimer.it_value = make_timeval(timeout);
     r = setitimer(ITIMER_REAL, &itimer, nullptr);
     assert(r >= 0);
 
@@ -41,6 +38,8 @@ int main(int argc, char** argv) {
     // Wait for the child and print its status
     int status;
     pid_t exited_pid = waitpid(p1, &status, 0);
+
+    // Print results
     if (exited_pid == -1 && errno == EINTR) {
         fprintf(stderr, "%s parent interrupted by signal after %g sec\n",
                 argv[0], tstamp() - start_time);
