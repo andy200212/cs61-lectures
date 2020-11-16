@@ -1,6 +1,4 @@
-BASEPROGRAMS = timedwait-poll timedwait-block timedwait-blockvar \
-	timedwait-alarm timedwait-selfpipe timedwait-selfpipe2 \
-	timedwait-signalfd
+BASEPROGRAMS = filtermultiples primesieve
 PROGRAMS = $(BASEPROGRAMS)
 all: $(PROGRAMS) $(DATAFILE)
 
