@@ -24,7 +24,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <netdb.h>
 
 // tstamp()
 //    Return the current time as a double.

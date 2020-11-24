@@ -1,5 +1,6 @@
-DB_PROGRAMS = $(sort $(patsubst %.cc,%,$(wildcard weensydb-??.cc)))
-BASEPROGRAMS = wdbclient wdbclientloop wdbblaster $(DB_PROGRAMS) incr-basic
+BASEPROGRAMS = incr-basic \
+	incr-volatile incr-atomic incr-mutex \
+	incr-trymutex incr-spinlock
 PROGRAMS = $(BASEPROGRAMS) incr-basic-O0
 all: $(PROGRAMS)
 
@@ -8,7 +9,6 @@ variants = $(1) $(addsuffix -unsafe,$(1)) $(addsuffix -O0,$(1))
 O ?= 3
 PTHREAD = 1
 include ../common/rules.mk
-CXXFLAGS += -Wno-unused-result
 
 UNSAFEFLAGS := -U_FORTIFY_SOURCE -fno-stack-protector $(if $(ISLINUX),-no-pie,)
 

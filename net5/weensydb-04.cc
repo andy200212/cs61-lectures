@@ -12,6 +12,7 @@ struct hash_item {
 
 #define NBUCKETS 1024
 std::list<hash_item> hash[NBUCKETS];
+std::mutex hash_mutex[NBUCKETS];
 
 
 // hash_get(key, create)
@@ -42,6 +43,7 @@ void handle_connection(int cfd) {
         if (sscanf(buf, "get %s ", key) == 1) {
             // find item
             auto b = string_hash(key) % NBUCKETS;
+            std::scoped_lock lock(hash_mutex[b]);
             auto it = hfind(hash[b], key);
 
             // print value
@@ -54,11 +56,10 @@ void handle_connection(int cfd) {
             fprintf(f, "END\r\n");
             fflush(f);
 
-	    fprintf(stderr, "GET key %s, value %s\n", key, it->value.data());
-
         } else if (sscanf(buf, "set %s %zu ", key, &sz) == 2) {
             // find item; insert if missing
             auto b = string_hash(key) % NBUCKETS;
+            std::scoped_lock lock(hash_mutex[b]);
             auto it = hfind(hash[b], key);
             if (it == hash[b].end()) {
                 it = hash[b].insert(it, hash_item(key));
@@ -70,11 +71,10 @@ void handle_connection(int cfd) {
             fprintf(f, "STORED %p\r\n", &*it);
             fflush(f);
 
-	    fprintf(stderr, "SET key %s, value %s\n", key, it->value.data());
-
         } else if (sscanf(buf, "delete %s ", key) == 1) {
             // find item
             auto b = string_hash(key) % NBUCKETS;
+            std::scoped_lock lock(hash_mutex[b]);
             auto it = hfind(hash[b], key);
 
             // remove if found
@@ -87,12 +87,10 @@ void handle_connection(int cfd) {
             }
             fflush(f);
 
-	    fprintf(stderr, "DELETE key %s\n", key);
-
         } else if (remove_trailing_whitespace(buf)) {
             fprintf(f, "ERROR\r\n");
             fflush(f);
-	}
+        }
     }
 
     if (ferror(fin)) {
@@ -125,6 +123,7 @@ int main(int argc, char** argv) {
         }
 
         // Handle connection
-        handle_connection(cfd);
+        std::thread t(handle_connection, cfd);
+        t.detach();
     }
 }

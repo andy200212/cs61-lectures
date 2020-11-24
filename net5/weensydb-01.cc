@@ -54,8 +54,6 @@ void handle_connection(int cfd) {
             fprintf(f, "END\r\n");
             fflush(f);
 
-	    fprintf(stderr, "GET key %s, value %s\n", key, it->value.data());
-
         } else if (sscanf(buf, "set %s %zu ", key, &sz) == 2) {
             // find item; insert if missing
             auto b = string_hash(key) % NBUCKETS;
@@ -69,8 +67,6 @@ void handle_connection(int cfd) {
             fread(it->value.data(), 1, sz, fin);
             fprintf(f, "STORED %p\r\n", &*it);
             fflush(f);
-
-	    fprintf(stderr, "SET key %s, value %s\n", key, it->value.data());
 
         } else if (sscanf(buf, "delete %s ", key) == 1) {
             // find item
@@ -87,12 +83,10 @@ void handle_connection(int cfd) {
             }
             fflush(f);
 
-	    fprintf(stderr, "DELETE key %s\n", key);
-
         } else if (remove_trailing_whitespace(buf)) {
             fprintf(f, "ERROR\r\n");
             fflush(f);
-	}
+        }
     }
 
     if (ferror(fin)) {

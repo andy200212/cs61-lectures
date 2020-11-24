@@ -12,6 +12,11 @@ struct hash_item {
 
 #define NBUCKETS 1024
 std::list<hash_item> hash[NBUCKETS];
+std::mutex hash_mutex[NBUCKETS];
+
+std::mutex thread_mutex;
+std::condition_variable thread_cv;
+int nthreads;
 
 
 // hash_get(key, create)
@@ -40,59 +45,78 @@ void handle_connection(int cfd) {
 
     while (fgets(buf, BUFSIZ, fin)) {
         if (sscanf(buf, "get %s ", key) == 1) {
-            // find item
+            // find item and fetch value
             auto b = string_hash(key) % NBUCKETS;
+            hash_mutex[b].lock();
             auto it = hfind(hash[b], key);
 
-            // print value
+            void* ptr = nullptr;
+            std::string value;
             if (it != hash[b].end()) {
+                ptr = &*it;
+                value = it->value;
+            }
+            hash_mutex[b].unlock();
+
+            // print value
+            if (ptr) {
                 fprintf(f, "VALUE %s %zu %p\r\n",
-                        key, it->value.length(), &*it);
-                fwrite(it->value.data(), 1, it->value.length(), f);
+                        key, value.length(), ptr);
+                fwrite(value.data(), 1, value.length(), f);
                 fprintf(f, "\r\n");
             }
             fprintf(f, "END\r\n");
             fflush(f);
 
-	    fprintf(stderr, "GET key %s, value %s\n", key, it->value.data());
-
         } else if (sscanf(buf, "set %s %zu ", key, &sz) == 2) {
+            // read value
+            std::string value = std::string(sz, '\0');
+            fread(value.data(), 1, sz, fin);
+
             // find item; insert if missing
             auto b = string_hash(key) % NBUCKETS;
+            hash_mutex[b].lock();
+            std::scoped_lock lock(hash_mutex[b]);
             auto it = hfind(hash[b], key);
             if (it == hash[b].end()) {
                 it = hash[b].insert(it, hash_item(key));
             }
 
             // set value
-            it->value.assign(sz, '\0');
-            fread(it->value.data(), 1, sz, fin);
-            fprintf(f, "STORED %p\r\n", &*it);
-            fflush(f);
+            it->value.swap(value);
+            void* ptr = &*it;
+            hash_mutex[b].unlock();
 
-	    fprintf(stderr, "SET key %s, value %s\n", key, it->value.data());
+            // print notice
+            fprintf(f, "STORED %p\r\n", ptr);
+            fflush(f);
 
         } else if (sscanf(buf, "delete %s ", key) == 1) {
             // find item
             auto b = string_hash(key) % NBUCKETS;
+            hash_mutex[b].lock();
             auto it = hfind(hash[b], key);
 
             // remove if found
+            void* ptr = nullptr;
             if (it != hash[b].end()) {
-                void* ptr = &*it;
+                ptr = &*it;
                 hash[b].erase(it);
+            }
+            hash_mutex[b].unlock();
+
+            // print message
+            if (ptr) {
                 fprintf(f, "DELETED %p\r\n", ptr);
             } else {
                 fprintf(f, "NOT_FOUND\r\n");
             }
             fflush(f);
 
-	    fprintf(stderr, "DELETE key %s\n", key);
-
         } else if (remove_trailing_whitespace(buf)) {
             fprintf(f, "ERROR\r\n");
             fflush(f);
-	}
+        }
     }
 
     if (ferror(fin)) {
@@ -100,6 +124,11 @@ void handle_connection(int cfd) {
     }
     fclose(fin); // also closes `f`'s underlying fd
     (void) fclose(f);
+
+    // mark thread as closed
+    std::unique_lock<std::mutex> guard(thread_mutex);
+    --nthreads;
+    thread_cv.notify_all();
 }
 
 
@@ -124,7 +153,15 @@ int main(int argc, char** argv) {
             exit(1);
         }
 
+        // At most 100 threads at a time
+        std::unique_lock<std::mutex> guard(thread_mutex);
+        while (nthreads == 100) {
+            thread_cv.wait(guard);
+        }
+        ++nthreads;
+
         // Handle connection
-        handle_connection(cfd);
+        std::thread t(handle_connection, cfd);
+        t.detach();
     }
 }
