@@ -36,7 +36,7 @@ void handle_connection(int cfd) {
     FILE* fin = fdopen(cfd, "r");
     FILE* f = fdopen(cfd, "w");
 
-    char buf[BUFSIZ], key[BUFSIZ];
+    char buf[BUFSIZ], key[BUFSIZ], key2[BUFSIZ];
     size_t sz;
 
     while (fgets(buf, BUFSIZ, fin)) {
@@ -72,13 +72,14 @@ void handle_connection(int cfd) {
             // find item; insert if missing
             auto b = string_hash(key) % NBUCKETS;
             hash_mutex[b].lock();
+            std::scoped_lock lock(hash_mutex[b]);
             auto it = hfind(hash[b], key);
             if (it == hash[b].end()) {
                 it = hash[b].insert(it, hash_item(key));
             }
 
             // set value
-            it->value.swap(value);
+            it->value = value;
             void* ptr = &*it;
             hash_mutex[b].unlock();
 
@@ -108,6 +109,36 @@ void handle_connection(int cfd) {
             }
             fflush(f);
 
+        } else if (sscanf(buf, "exch %s %s ", key, key2) == 2) {
+            // find item
+            auto b1 = string_hash(key) % NBUCKETS;
+            auto b2 = string_hash(key2) % NBUCKETS;
+            if (b1 > b2) {
+                hash_mutex[b2].lock();
+                hash_mutex[b1].lock();
+            } else if (b1 == b2) {
+                hash_mutex[b1].lock();
+            } else {
+                hash_mutex[b1].lock();
+                hash_mutex[b2].lock();
+            }
+            auto it1 = hfind(hash[b1], key);
+            auto it2 = hfind(hash[b2], key2);
+
+            // exchange items
+            if (it1 != hash[b1].end() && it2 != hash[b2].end()) {
+                std::swap(it1->value, it2->value);
+                fprintf(f, "EXCHANGED %p %p\r\n", &*it1, &*it2);
+            } else {
+                fprintf(f, "NOT_FOUND\r\n");
+            }
+            fflush(f);
+
+            hash_mutex[b1].unlock();
+            if (b1 != b2) {
+                hash_mutex[b2].unlock();
+            }
+            
         } else if (remove_trailing_whitespace(buf)) {
             fprintf(f, "ERROR\r\n");
             fflush(f);

@@ -14,6 +14,10 @@ struct hash_item {
 std::list<hash_item> hash[NBUCKETS];
 std::mutex hash_mutex[NBUCKETS];
 
+std::mutex thread_mutex;
+std::condition_variable thread_cv;
+int nthreads;
+
 
 // hash_get(key, create)
 //    Looks up `key` in the hashtable, `hash`, and returns
@@ -119,6 +123,11 @@ void handle_connection(int cfd) {
     }
     fclose(fin); // also closes `f`'s underlying fd
     (void) fclose(f);
+
+    // mark thread as closed
+    std::unique_lock<std::mutex> guard(thread_mutex);
+    --nthreads;
+    thread_cv.notify_all();
 }
 
 
@@ -142,6 +151,13 @@ int main(int argc, char** argv) {
             perror("accept");
             exit(1);
         }
+
+        // At most 100 threads at a time
+        std::unique_lock<std::mutex> guard(thread_mutex);
+        while (nthreads == 100) {
+            thread_cv.wait(guard);
+        }
+        ++nthreads;
 
         // Handle connection
         std::thread t(handle_connection, cfd);
